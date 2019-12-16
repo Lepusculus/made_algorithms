@@ -103,17 +103,17 @@ struct FixedHashTable {
         }
     }
 
-    void to_another(FixedHashTable *ft) {
+    void to_another(FixedHashTable *ft) const {
         for (int i = 0; i < max_size; ++i)
             if (!(is_free[i]||is_deleted[i]))
                 ft->add_new_elem(table[i].first);
     }
 
-    bool full() {
+    bool full() const {
         return count * 4 > max_size * 3;
     }
 
-    bool  too_sparse(){
+    bool  too_sparse() const {
         return max_size > 8 && count*4 >max_size;
     }
 
