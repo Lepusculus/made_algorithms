@@ -17,6 +17,7 @@ g(k, i)=g(k, i-1) + i (mod m). m - степень двойки.
 
 #include <string>
 #include <iostream>
+#include <memory>
 
 using h_pair = std::pair<int, int>;
 using table_elem = std::pair<std::string, h_pair>;
@@ -35,30 +36,31 @@ h_pair make_hp(const std::string &s) {
 }
 
 struct FixedHashTable {
-    int *used; //0 - free, 1 - active, 2-deleted
-    table_elem *table;
+    std::unique_ptr<bool[]> is_free;
+    std::unique_ptr<bool[]> is_deleted;
+
+    std::unique_ptr<table_elem []> table;
     int max_size;
     int count;
 
     FixedHashTable(int size) {
         max_size = size;
-        used = new int[size];
-        for (int i = 0; i < size; ++i) used[i] = 0;
-        table = new table_elem[size];
+        is_free = std::unique_ptr<bool[]>(new bool[size]);
+        is_deleted = std::unique_ptr<bool[]>(new bool[size]);
+        for (int i = 0; i < size; ++i) {
+            is_free[i] = true;
+            is_deleted[i] = false;
+        }
+        table = std::unique_ptr<table_elem []>(new table_elem[size]);
         count = 0;
     }
 
-    ~FixedHashTable() {
-        delete[] used;
-        delete[] table;
-    }
-
-    bool contains(const std::string &s) {
+    bool contains(const std::string &s) const{
         auto hashes = make_hp(s);
         auto index = hashes.first % max_size;
         for (int i = 0; i < max_size; ++i) {
-            if (used[index] == 0) return false;
-            if (used[index] == 1) {
+            if (is_free[index]) return false;
+            if (!is_deleted[index]) {
                 if (table[index].second == hashes) {
                     if (table[index].first == s) return true;
                 }
@@ -72,9 +74,11 @@ struct FixedHashTable {
         auto hashes = make_hp(s);
         auto index = hashes.first % max_size;
         for (int i = 0;; ++i) {
-            if (used[index] != 1) {
+            if (is_free[index] || is_deleted[index] ) {
                 table[index] = std::make_pair(s, hashes);
-                used[index] = 1;
+                is_free[index] = false;
+                is_deleted[index] = false;
+
                 ++count;
                 return;
             }
@@ -86,10 +90,10 @@ struct FixedHashTable {
         auto hashes = make_hp(s);
         auto index = hashes.first % max_size;
         for (int i = 0;; ++i) {
-            if (used[index] == 1) {
+            if (!(is_free[index]||is_deleted[index])) {
                 if (table[index].second == hashes) {
                     if (table[index].first == s) {
-                        used[index] = 2;
+                        is_deleted[index] = true;
                         --count;
                         return;
                     };
@@ -101,12 +105,16 @@ struct FixedHashTable {
 
     void to_another(FixedHashTable *ft) {
         for (int i = 0; i < max_size; ++i)
-            if (used[i] == 1)
+            if (!(is_free[i]||is_deleted[i]))
                 ft->add_new_elem(table[i].first);
     }
 
     bool full() {
         return count * 4 > max_size * 3;
+    }
+
+    bool  too_sparse(){
+        return max_size > 8 && count*4 >max_size;
     }
 
 
@@ -116,18 +124,16 @@ struct FixedHashTable {
 class HashTable {
 private:
     int size;
-    FixedHashTable *table;
+    std::unique_ptr<FixedHashTable> table;
 public:
     HashTable() {
         size = 8;
-        table = new FixedHashTable(8);
+        table = std::unique_ptr<FixedHashTable>(new FixedHashTable(8));
     }
 
-    ~HashTable() {
-        delete table;
-    }
 
-    bool contains(const std::string &s) {
+
+    bool contains(const std::string &s) const {
         return table->contains(s);
     }
 
@@ -138,8 +144,8 @@ public:
             size *= 2;
             FixedHashTable *next = new FixedHashTable(size);
             table->to_another(next);
-            delete table;
-            table = next;
+
+            table = std::unique_ptr<FixedHashTable>(next);
         }
         return true;
     }
@@ -147,6 +153,12 @@ public:
     bool remove(const std::string &s) {
         if (!table->contains(s)) return false;
         table->remove_elem(s);
+        if(table->too_sparse()){
+            size /=2;
+            FixedHashTable *next = new FixedHashTable(size);
+            table->to_another(next);
+            table = std::unique_ptr<FixedHashTable>(next);
+        }
         return true;
     }
 };
