@@ -32,7 +32,7 @@ struct HashableOrderedVector {
         hash %= 10000007;
     }
 
-    int last(){
+    int last() const {
         if(positions.empty()) return -1;
         return positions[positions.size()-1];
     }
